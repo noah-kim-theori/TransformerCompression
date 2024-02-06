@@ -68,22 +68,28 @@ def slice_mlp_input(layer_adapter: LayerAdapter, new_embedding_dimension: int) -
 
 def rotate_mlp_output(layer_adapter: LayerAdapter, Q: torch.Tensor) -> None:
     # Rotate the MLP output weights and bias.
-    W = layer_adapter.get_mlp_output()
-    dtype = W.weight.data.dtype
-    W_ = W.weight.data.to(device=config.device, dtype=torch.float64)
-    W.weight.data = torch.matmul(Q.T, W_).to(device="cpu", dtype=dtype)
-    if W.bias is not None:
-        b = W.bias.data.to(device=config.device, dtype=torch.float64)
-        W.bias.data = torch.matmul(Q.T, b).to(device="cpu", dtype=dtype)
+    modules = layer_adapter.get_mlp_output()
+    if not isinstance(modules, list):
+        modules = [modules]
+    for W in modules:
+        dtype = W.weight.data.dtype
+        W_ = W.weight.data.to(device=config.device, dtype=torch.float64)
+        W.weight.data = torch.matmul(Q.T, W_).to(device="cpu", dtype=dtype)
+        if W.bias is not None:
+            b = W.bias.data.to(device=config.device, dtype=torch.float64)
+            W.bias.data = torch.matmul(Q.T, b).to(device="cpu", dtype=dtype)
 
 
 def slice_mlp_output(layer_adapter: LayerAdapter, new_embedding_dimension: int) -> None:
     # Slice the MLP output weights and bias.
-    W = layer_adapter.get_mlp_output()
-    W.weight.data = W.weight.data[:new_embedding_dimension, :]
-    if W.bias is not None:
-        W.bias.data = W.bias.data[:new_embedding_dimension]
-    W.out_features = new_embedding_dimension
+    modules = layer_adapter.get_mlp_output()
+    if not isinstance(modules, list):
+        modules = [modules]
+    for W in modules:
+        W.weight.data = W.weight.data[:new_embedding_dimension, :]
+        if W.bias is not None:
+            W.bias.data = W.bias.data[:new_embedding_dimension]
+        W.out_features = new_embedding_dimension
 
 
 def rotate_embeddings(model_adapter: ModelAdapter, Q: torch.Tensor) -> None:
@@ -153,6 +159,8 @@ def rotate_and_slice_sequential(
         inp_batch, args_batch, kwargs_batch = get_layer0_inputs(model_adapter, batch)
         inps.append(inp_batch)
         args.append(args_batch)
+        # drop key value cache
+        kwargs_batch.pop("past_key_value")
         kwargs.append(kwargs_batch)
         if ignore_tokens:
             ignore_masks.append(
