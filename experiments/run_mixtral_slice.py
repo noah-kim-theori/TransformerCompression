@@ -92,10 +92,11 @@ with open(os.path.join(PATH, "slice_config.json"), "w") as f:
     f.write(model_adapter.slicing_conf.to_json_string())
 
 with open(os.path.join(MODEL, "model.safetensors.index.json")) as f:
-    loaded = json.load(f)["weight_map"]
+    loaded = json.load(f)
+    weight_map = loaded["weight_map"]
 
 files, ckpt = {}, model.state_dict()
-for k, v in loaded.items():
+for k, v in weight_map.items():
     if v not in files:
         files[v] = {}
     if k not in ckpt:
@@ -119,10 +120,17 @@ for k, v in loaded.items():
 for k, tensors in tqdm(files.items(), total=len(files)):
     save_file(tensors, os.path.join(PATH, k), {"format": "pt"})
 
+with open(os.path.join(PATH, "model.safetensors.index.json"), "w") as f:
+    loaded["weight_map"] = {
+        key: filename
+        for filename, keys in files.items()
+        for key in keys
+    }
+    json.dump(loaded, f, indent=4)
+
 CONFIGS = [
     "config.json",
     "generation_config.json",
-    "model.safetensors.index.json",
     "special_tokens_map.json",
     "tokenizer_config.json",
     "tokenizer.json",
