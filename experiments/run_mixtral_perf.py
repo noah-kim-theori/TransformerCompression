@@ -4,6 +4,7 @@ sys.path.append("../src")
 import argparse
 import json
 import os
+import subprocess
 
 import torch
 import torch.nn as nn
@@ -98,6 +99,13 @@ with open(PROMPTS) as f:
 
 PATH = f"./models/response/perf_{int(SPARSITY * 100)}{'_quant' if QUANTIZE else ''}.json"
 os.makedirs(os.path.dirname(PATH))
+
+def gpuview():
+    _COMMAND = "nvidia-smi --query-gpu=memory.used,utilization.gpu --format=csv"
+    output = subprocess.check_output(_COMMAND.split()).decode("ascii")
+    _, report = output.strip().split("\n")
+    return report
+
 outputs = {
     "__simple__": simple,
     "__metadata__": {
@@ -105,10 +113,15 @@ outputs = {
         "sparsity": SPARSITY,
         "round_interval": ROUND_INTERVAL,
         "quantize": QUANTIZE,
+        "gpu": {
+            "on-load": gpuview(),
+            "post-inference": [],
+        }
     }
 }
 for key, val in tqdm(prompts.items(), total=len(prompts)):
     result = pipe(val, max_new_tokens=2048)
     outputs[key] = result
+    outputs["__metadata__"]["gpu"]["post-inference"].append(gpuview())
     with open(PATH, "w") as f:
         json.dump(outputs, f, indent=4, ensure_ascii=False)
