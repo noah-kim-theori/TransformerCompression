@@ -5,6 +5,7 @@ import argparse
 import json
 import os
 import subprocess
+from time import time
 
 import torch
 import torch.nn as nn
@@ -98,7 +99,7 @@ with open(PROMPTS) as f:
     prompts = json.load(f)
 
 PATH = f"./models/response/perf_{int(SPARSITY * 100)}{'_quant' if QUANTIZE else ''}.json"
-os.makedirs(os.path.dirname(PATH))
+os.makedirs(os.path.dirname(PATH), exist_ok=True)
 
 def gpuview():
     _COMMAND = "nvidia-smi --query-gpu=memory.used,utilization.gpu --format=csv"
@@ -120,8 +121,10 @@ outputs = {
     }
 }
 for key, val in tqdm(prompts.items(), total=len(prompts)):
+    start = time()
     result = pipe(val, max_new_tokens=2048)
+    elapsed = time() - start
     outputs[key] = result
-    outputs["__metadata__"]["gpu"]["post-inference"].append(gpuview())
+    outputs["__metadata__"]["gpu"]["post-inference"].append([gpuview(), elapsed])
     with open(PATH, "w") as f:
         json.dump(outputs, f, indent=4, ensure_ascii=False)
