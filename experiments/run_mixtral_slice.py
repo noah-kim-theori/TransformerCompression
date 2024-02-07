@@ -95,27 +95,26 @@ with open(os.path.join(MODEL, "model.safetensors.index.json")) as f:
     loaded = json.load(f)
     weight_map = loaded["weight_map"]
 
-files, ckpt = {}, model.state_dict()
+ckpt = model.state_dict()
+files, dropped = {}, []
 for k, v in weight_map.items():
     if v not in files:
         files[v] = {}
     if k not in ckpt:
-        MODEL_LN = "model.norm.weight"
-        PRE_ATTN_LN = "input_layernorm.weight"
-        PRE_MLP_LN = "post_attention_layernorm.weight"
-        assert any(
-            k.endswith(postfix) for postfix in [MODEL_LN, PRE_ATTN_LN, PRE_MLP_LN]
-        ), f"unintended key: {k}"
-        if k.endswith(PRE_ATTN_LN):
-             k = k.replace(PRE_ATTN_LN, "attn_shortcut_Q")
-        if k.endswith(PRE_MLP_LN):
-             k = k.replace(PRE_MLP_LN, "mlp_shortcut_Q")
-
-    if k not in ckpt:
-        print(k)
+        dropped.append(k)
         continue
 
     files[v][k] = ckpt[k]
+
+keys = set(ckpt) - set(
+    key
+    for keys in files.values()
+    for key in keys)
+
+with open(os.path.join(PATH, "model.safetensors.log"), "w") as f:
+    json.dump({"dropped": dropped, "rotation": list(keys)}, f, indent=4)
+
+files["model-rotation.safetensors"] = {k: ckpt[k].contiguous() for k in keys}
 
 for k, tensors in tqdm(files.items(), total=len(files)):
     save_file(tensors, os.path.join(PATH, k), {"format": "pt"})
